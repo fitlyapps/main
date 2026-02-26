@@ -25,14 +25,17 @@ cp .env.example .env.local
 ```
 
 3. Renseigner les clés Supabase + Stripe dans `.env.local`.
+4. Dans Supabase (`Authentication` -> `URL Configuration`), ajouter :
+- `Site URL`: ton URL Vercel de prod
+- `Redirect URLs`: `http://localhost:3000/dashboard` et ton URL Vercel `/dashboard`
 
-4. Générer Prisma client:
+5. Générer Prisma client:
 
 ```bash
 npm run db:generate
 ```
 
-5. Lancer le serveur:
+6. Lancer le serveur:
 
 ```bash
 npm run dev

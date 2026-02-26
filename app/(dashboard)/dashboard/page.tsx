@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { requireUser } from "@/lib/auth";
 import { Kpis } from "@/components/dashboard/kpis";
 import { Card } from "@/components/ui/card";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  await requireUser();
+
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
       <header className="flex flex-wrap items-center justify-between gap-4">

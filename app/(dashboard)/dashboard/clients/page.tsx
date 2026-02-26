@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 
 const clients = [
@@ -6,7 +7,9 @@ const clients = [
   { name: "Maya Chen", goal: "Force", checkin: "1 photo reçue" }
 ];
 
-export default function ClientsPage() {
+export default async function ClientsPage() {
+  await requireUser();
+
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
       <h1 className="text-3xl font-semibold tracking-tight">Espace Clients</h1>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AuthControls } from "@/components/auth/auth-controls";
 
 const links = [
   { href: "/", label: "Accueil" },
@@ -38,7 +39,7 @@ export function GlobalNavbar() {
           Fitly
         </Link>
 
-        <nav className="flex flex-1 items-center gap-2 overflow-x-auto">
+        <nav className="flex items-center gap-2 overflow-x-auto">
           {links.map((link) => {
             const isActive =
               link.href === "/"
@@ -59,6 +60,7 @@ export function GlobalNavbar() {
             );
           })}
         </nav>
+        <AuthControls />
       </div>
     </header>
   );
