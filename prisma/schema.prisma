@@ -1,0 +1,229 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  COACH
+  CLIENT
+  ADMIN
+}
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum SessionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+model User {
+  id                String              @id @default(cuid())
+  email             String              @unique
+  fullName          String
+  role              UserRole
+  avatarUrl         String?
+  locale            String              @default("en")
+  timezone          String              @default("UTC")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  coachProfile      CoachProfile?
+  clientProfile     ClientProfile?
+  sentMessages      Message[]           @relation("SentMessages")
+  receivedMessages  Message[]           @relation("ReceivedMessages")
+  progressPhotos    ProgressPhoto[]
+
+  @@index([role])
+}
+
+model CoachProfile {
+  id                 String          @id @default(cuid())
+  userId             String          @unique
+  bio                String?
+  specialties        String[]
+  yearsExperience    Int?
+  countryCode        String?
+  city               String?
+  isVerified         Boolean         @default(false)
+  avgRating          Decimal         @default(0) @db.Decimal(3, 2)
+  ratingCount        Int             @default(0)
+  monthlyPriceCents  Int?
+  currency           String          @default("EUR")
+  stripeAccountId    String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clients            CoachClient[]
+  reviews            Review[]
+
+  @@index([countryCode, city])
+  @@index([avgRating])
+}
+
+model ClientProfile {
+  id                 String            @id @default(cuid())
+  userId             String            @unique
+  goals              String[]
+  heightCm           Int?
+  weightKg           Decimal?          @db.Decimal(5, 2)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coaches            CoachClient[]
+}
+
+model CoachClient {
+  id                 String            @id @default(cuid())
+  coachId            String
+  clientId           String
+  startedAt          DateTime          @default(now())
+  active             Boolean           @default(true)
+
+  coach              CoachProfile      @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  client             ClientProfile     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  nutritionPlans     NutritionPlan[]
+  trainingPrograms   TrainingProgram[]
+  messages           Message[]
+  progressPhotos     ProgressPhoto[]
+
+  @@unique([coachId, clientId])
+}
+
+model Review {
+  id                 String            @id @default(cuid())
+  coachId            String
+  clientUserId       String
+  score              Int
+  comment            String?
+  createdAt          DateTime          @default(now())
+
+  coach              CoachProfile      @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@index([coachId])
+}
+
+model NutritionPlan {
+  id                 String            @id @default(cuid())
+  coachClientId      String
+  title              String
+  status             PlanStatus        @default(DRAFT)
+  weekStartDate      DateTime
+  caloriesTarget     Int
+  proteinTargetG     Int
+  carbsTargetG       Int
+  fatTargetG         Int
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  coachClient        CoachClient       @relation(fields: [coachClientId], references: [id], onDelete: Cascade)
+  dailyEntries       NutritionDay[]
+
+  @@index([coachClientId, weekStartDate])
+}
+
+model NutritionDay {
+  id                 String            @id @default(cuid())
+  nutritionPlanId    String
+  date               DateTime
+  calories           Int
+  proteinG           Int
+  carbsG             Int
+  fatG               Int
+
+  nutritionPlan      NutritionPlan     @relation(fields: [nutritionPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([nutritionPlanId, date])
+}
+
+model TrainingProgram {
+  id                 String            @id @default(cuid())
+  coachClientId      String
+  title              String
+  status             PlanStatus        @default(DRAFT)
+  goal               String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  coachClient        CoachClient       @relation(fields: [coachClientId], references: [id], onDelete: Cascade)
+  sessions           WorkoutSession[]
+}
+
+model WorkoutSession {
+  id                 String            @id @default(cuid())
+  trainingProgramId  String
+  title              String
+  dayLabel           String?
+  status             SessionStatus     @default(PLANNED)
+  createdAt          DateTime          @default(now())
+
+  trainingProgram    TrainingProgram   @relation(fields: [trainingProgramId], references: [id], onDelete: Cascade)
+  exercises          ExerciseEntry[]
+}
+
+model ExerciseEntry {
+  id                 String            @id @default(cuid())
+  workoutSessionId   String
+  name               String
+  targetSets         Int
+  targetReps         String
+  restSeconds        Int
+  targetLoadKg       Decimal?          @db.Decimal(6, 2)
+  previousLoadKg     Decimal?          @db.Decimal(6, 2)
+  notes              String?
+
+  workoutSession     WorkoutSession    @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+}
+
+model ProgressPhoto {
+  id                 String            @id @default(cuid())
+  userId             String
+  coachClientId      String
+  storagePath        String
+  capturedAt         DateTime
+  createdAt          DateTime          @default(now())
+
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coachClient        CoachClient       @relation(fields: [coachClientId], references: [id], onDelete: Cascade)
+
+  @@index([coachClientId, capturedAt])
+}
+
+model Message {
+  id                 String            @id @default(cuid())
+  coachClientId      String
+  senderUserId       String
+  receiverUserId     String
+  body               String
+  sentAt             DateTime          @default(now())
+
+  coachClient        CoachClient       @relation(fields: [coachClientId], references: [id], onDelete: Cascade)
+  sender             User              @relation("SentMessages", fields: [senderUserId], references: [id], onDelete: Cascade)
+  receiver           User              @relation("ReceivedMessages", fields: [receiverUserId], references: [id], onDelete: Cascade)
+
+  @@index([coachClientId, sentAt])
+}
+
+model Subscription {
+  id                 String            @id @default(cuid())
+  coachUserId        String            @unique
+  stripeCustomerId   String?
+  stripeSubId        String?
+  status             String
+  currentPeriodEnd   DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+}
