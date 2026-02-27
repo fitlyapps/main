@@ -13,16 +13,6 @@ export async function requireUser() {
     redirect("/auth/sign-in?next=/dashboard");
   }
 
-  try {
-    await syncAppUser({
-      email: user.email,
-      fullName: user.user_metadata?.full_name,
-      role: user.user_metadata?.role
-    });
-  } catch (error) {
-    console.error("syncAppUser failed in requireUser:", error);
-  }
-
   return user;
 }
 
@@ -57,7 +47,7 @@ export async function requireAppUser() {
   }
 
   if (!appUser) {
-    redirect("/auth/sign-in");
+    redirect("/auth/sign-in?next=/dashboard");
   }
 
   return appUser;
