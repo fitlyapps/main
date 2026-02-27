@@ -10,27 +10,32 @@ function getSingleParam(value: string | string[] | undefined) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function getArrayParam(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => entry.trim()).filter(Boolean);
+  }
+
+  return typeof value === "string" && value.trim() ? [value.trim()] : [];
+}
+
+const BASE_COMPLETENESS_FILTERS: Prisma.CoachProfileWhereInput[] = [
+  { bio: { not: null } },
+  { city: { not: null } },
+  { countryCode: { not: null } },
+  { monthlyPriceCents: { not: null } },
+  { specialties: { isEmpty: false } }
+];
+
 export default async function CoachesPage({ searchParams }: CoachesPageProps) {
   const params = searchParams ? await searchParams : undefined;
   const q = getSingleParam(params?.q);
-  const specialty = getSingleParam(params?.specialty);
-  const country = getSingleParam(params?.country).toUpperCase();
+  const specialties = getArrayParam(params?.specialty);
   const city = getSingleParam(params?.city);
 
-  const filters: Prisma.CoachProfileWhereInput[] = [
-    { bio: { not: null } },
-    { city: { not: null } },
-    { countryCode: { not: null } },
-    { monthlyPriceCents: { not: null } },
-    { specialties: { isEmpty: false } }
-  ];
+  const filters: Prisma.CoachProfileWhereInput[] = [...BASE_COMPLETENESS_FILTERS];
 
-  if (specialty) {
-    filters.push({ specialties: { has: specialty } });
-  }
-
-  if (country) {
-    filters.push({ countryCode: { equals: country, mode: "insensitive" } });
+  if (specialties.length) {
+    filters.push({ specialties: { hasSome: specialties } });
   }
 
   if (city) {
@@ -43,26 +48,40 @@ export default async function CoachesPage({ searchParams }: CoachesPageProps) {
         { user: { fullName: { contains: q, mode: "insensitive" } } },
         { bio: { contains: q, mode: "insensitive" } },
         { city: { contains: q, mode: "insensitive" } },
-        { specialties: { has: q } }
+        ...specialties.map((specialty) => ({ specialties: { has: specialty } }))
       ]
     });
   }
 
-  const coaches = await prisma.coachProfile.findMany({
-    where: {
-      AND: filters
-    },
-    include: {
-      user: {
-        select: {
-          fullName: true,
-          avatarUrl: true
+  const [coaches, cityRows] = await Promise.all([
+    prisma.coachProfile.findMany({
+      where: {
+        AND: filters
+      },
+      include: {
+        user: {
+          select: {
+            fullName: true,
+            avatarUrl: true
+          }
         }
+      },
+      orderBy: [{ isVerified: "desc" }, { avgRating: "desc" }, { createdAt: "desc" }],
+      take: 36
+    }),
+    prisma.coachProfile.findMany({
+      where: {
+        AND: BASE_COMPLETENESS_FILTERS
+      },
+      select: {
+        city: true
+      },
+      distinct: ["city"],
+      orderBy: {
+        city: "asc"
       }
-    },
-    orderBy: [{ isVerified: "desc" }, { avgRating: "desc" }, { createdAt: "desc" }],
-    take: 36
-  });
+    })
+  ]);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-12">
@@ -75,7 +94,8 @@ export default async function CoachesPage({ searchParams }: CoachesPageProps) {
       </div>
 
       <CoachCatalog
-        initialFilters={{ q, specialty, country, city }}
+        cityOptions={cityRows.map((row) => row.city).filter((value): value is string => Boolean(value))}
+        initialFilters={{ q, specialties, city }}
         coaches={coaches.map((coach) => ({
           id: coach.id,
           name: coach.user.fullName,
