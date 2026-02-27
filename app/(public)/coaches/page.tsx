@@ -2,21 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CoachCatalog } from "@/components/marketplace/coach-catalog";
 
-type CoachesPageProps = {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-function getSingleParam(value: string | string[] | undefined) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function getArrayParam(value: string | string[] | undefined) {
-  if (Array.isArray(value)) {
-    return value.map((entry) => entry.trim()).filter(Boolean);
-  }
-
-  return typeof value === "string" && value.trim() ? [value.trim()] : [];
-}
+export const dynamic = "force-dynamic";
 
 const BASE_COMPLETENESS_FILTERS: Prisma.CoachProfileWhereInput[] = [
   { bio: { not: null } },
@@ -26,37 +12,11 @@ const BASE_COMPLETENESS_FILTERS: Prisma.CoachProfileWhereInput[] = [
   { specialties: { isEmpty: false } }
 ];
 
-export default async function CoachesPage({ searchParams }: CoachesPageProps) {
-  const params = searchParams ? await searchParams : undefined;
-  const q = getSingleParam(params?.q);
-  const specialties = getArrayParam(params?.specialty);
-  const city = getSingleParam(params?.city);
-
-  const filters: Prisma.CoachProfileWhereInput[] = [...BASE_COMPLETENESS_FILTERS];
-
-  if (specialties.length) {
-    filters.push({ specialties: { hasSome: specialties } });
-  }
-
-  if (city) {
-    filters.push({ city: { contains: city, mode: "insensitive" } });
-  }
-
-  if (q) {
-    filters.push({
-      OR: [
-        { user: { fullName: { contains: q, mode: "insensitive" } } },
-        { bio: { contains: q, mode: "insensitive" } },
-        { city: { contains: q, mode: "insensitive" } },
-        ...specialties.map((specialty) => ({ specialties: { has: specialty } }))
-      ]
-    });
-  }
-
+export default async function CoachesPage() {
   const [coaches, cityRows] = await Promise.all([
     prisma.coachProfile.findMany({
       where: {
-        AND: filters
+        AND: BASE_COMPLETENESS_FILTERS
       },
       include: {
         user: {
@@ -67,7 +27,7 @@ export default async function CoachesPage({ searchParams }: CoachesPageProps) {
         }
       },
       orderBy: [{ isVerified: "desc" }, { avgRating: "desc" }, { createdAt: "desc" }],
-      take: 36
+      take: 60
     }),
     prisma.coachProfile.findMany({
       where: {
@@ -95,7 +55,6 @@ export default async function CoachesPage({ searchParams }: CoachesPageProps) {
 
       <CoachCatalog
         cityOptions={cityRows.map((row) => row.city).filter((value): value is string => Boolean(value))}
-        initialFilters={{ q, specialties, city }}
         coaches={coaches.map((coach) => ({
           id: coach.id,
           name: coach.user.fullName,
