@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { ChevronDown, LocateFixed, MapPin, Search, Sparkles, Star } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -128,6 +128,7 @@ async function reverseLookup(lat: number, lon: number) {
 }
 
 export function CoachCatalog({ coaches }: CoachCatalogProps) {
+  const router = useRouter();
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [cityInput, setCityInput] = useState("");
@@ -536,8 +537,18 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
         <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {visibleCoaches.map((coach, index) => (
             <motion.div key={coach.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: index * 0.05 }}>
-              <Link href={`/coaches/${coach.id}`} className="block h-full">
-              <Card className="group relative flex h-full flex-col overflow-hidden border border-slate-200/80 bg-white p-0 shadow-[0_18px_50px_rgba(15,23,42,0.07)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_22px_65px_rgba(15,23,42,0.12)]">
+              <Card
+                role="link"
+                tabIndex={0}
+                onClick={() => router.push(`/coaches/${coach.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    router.push(`/coaches/${coach.id}`);
+                  }
+                }}
+                className="group relative flex h-full cursor-pointer flex-col overflow-hidden border border-slate-200/80 bg-white p-0 shadow-[0_18px_50px_rgba(15,23,42,0.07)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_22px_65px_rgba(15,23,42,0.12)]"
+              >
                 <div className="h-24 bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_52%,#7dd3fc_100%)]" />
                 <div className="px-6 pb-6">
                   <div className="-mt-9 flex items-start justify-between gap-4">
@@ -604,7 +615,6 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
                   </div>
                 </div>
               </Card>
-              </Link>
             </motion.div>
           ))}
         </div>
