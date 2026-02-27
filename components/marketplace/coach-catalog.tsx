@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { ChevronDown, LocateFixed, MapPin, Search, Sparkles, Star } from "lucide-react";
+import { ChevronDown, LocateFixed, MapPin, Sparkles, Star } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +37,8 @@ type CitySuggestion = Coordinates & {
   countryCode: string | null;
   label: string;
 };
+
+type SortMode = "distance" | "rating" | "price_asc" | "price_desc";
 
 type CoachCatalogProps = {
   coaches: CoachCard[];
@@ -132,9 +134,9 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [cityInput, setCityInput] = useState("");
-  const [query, setQuery] = useState("");
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([]);
   const [radiusKm, setRadiusKm] = useState(25);
+  const [sortMode, setSortMode] = useState<SortMode>("distance");
   const [showCitySuggestions, setShowCitySuggestions] = useState(false);
   const [citySuggestions, setCitySuggestions] = useState<CitySuggestion[]>([]);
   const [selectedCity, setSelectedCity] = useState<CitySuggestion | null>(null);
@@ -296,25 +298,37 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
   }, [coaches, radiusKm, selectedCity]);
 
   const visibleCoaches = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    return coaches.filter((coach) => {
-      const matchesQuery =
-        !normalizedQuery ||
-        coach.name.toLowerCase().includes(normalizedQuery) ||
-        coach.bio?.toLowerCase().includes(normalizedQuery) ||
-        coach.city?.toLowerCase().includes(normalizedQuery) ||
-        coach.specialties.some((specialty) => specialty.toLowerCase().includes(normalizedQuery));
-
+    const filtered = coaches.filter((coach) => {
       const matchesSpecialties =
         selectedSpecialties.length === 0 ||
         selectedSpecialties.some((specialty) => coach.specialties.includes(specialty));
 
       const matchesDistance = distanceFilteredIds ? distanceFilteredIds.has(coach.id) : true;
 
-      return matchesQuery && matchesSpecialties && matchesDistance;
+      return matchesSpecialties && matchesDistance;
     });
-  }, [coaches, distanceFilteredIds, query, selectedSpecialties]);
+
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      if (sortMode === "rating") {
+        return b.avgRating - a.avgRating;
+      }
+
+      if (sortMode === "price_asc") {
+        return (a.monthlyPriceCents ?? Number.MAX_SAFE_INTEGER) - (b.monthlyPriceCents ?? Number.MAX_SAFE_INTEGER);
+      }
+
+      if (sortMode === "price_desc") {
+        return (b.monthlyPriceCents ?? 0) - (a.monthlyPriceCents ?? 0);
+      }
+
+      const distanceA = distanceByCoachId[a.id] ?? Number.MAX_SAFE_INTEGER;
+      const distanceB = distanceByCoachId[b.id] ?? Number.MAX_SAFE_INTEGER;
+      return distanceA - distanceB;
+    });
+
+    return sorted;
+  }, [coaches, distanceByCoachId, distanceFilteredIds, selectedSpecialties, sortMode]);
 
   async function fillLocationFromBrowser() {
     setLocationError(null);
@@ -358,23 +372,9 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
         <div className="grid gap-0 lg:grid-cols-[1.25fr_0.75fr]">
           <div className="border-b border-slate-200/80 p-5 lg:border-b-0 lg:border-r lg:border-r-slate-200/80">
             <div className="grid gap-5">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label>
-                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Recherche</span>
-                  <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                    <Search className="h-4 w-4 text-slate-500" />
-                    <input
-                      type="text"
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Nom du coach, specialite, ville"
-                      className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                    />
-                  </div>
-                </label>
-
+              <div className="grid gap-4 md:grid-cols-[1fr_180px]">
                 <div>
-                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Ville</span>
+                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Commune</span>
                   <div className="relative">
                     <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                       <MapPin className="h-4 w-4 text-slate-500" />
@@ -392,6 +392,16 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
                         autoComplete="off"
                         className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
                       />
+                      <button
+                        type="button"
+                        onClick={fillLocationFromBrowser}
+                        disabled={locationLoading}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-white transition hover:opacity-90 disabled:opacity-60"
+                        aria-label="Me localiser"
+                        title="Me localiser"
+                      >
+                        <LocateFixed className="h-4 w-4" />
+                      </button>
                     </div>
                     {showCitySuggestions && citySuggestions.length ? (
                       <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
@@ -415,6 +425,21 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
                     ) : null}
                   </div>
                 </div>
+
+                <label>
+                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Rayon</span>
+                  <select
+                    value={radiusKm}
+                    onChange={(event) => setRadiusKm(Number(event.target.value))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none"
+                  >
+                    {RADIUS_OPTIONS.map((value) => (
+                      <option key={value} value={value}>
+                        {value === 0 ? "Ville exacte" : `${value} km`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               <div className="grid gap-4 md:grid-cols-[1fr_180px]">
@@ -463,17 +488,16 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
                 </div>
 
                 <label>
-                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Rayon</span>
+                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Trier par</span>
                   <select
-                    value={radiusKm}
-                    onChange={(event) => setRadiusKm(Number(event.target.value))}
+                    value={sortMode}
+                    onChange={(event) => setSortMode(event.target.value as SortMode)}
                     className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none"
                   >
-                    {RADIUS_OPTIONS.map((value) => (
-                      <option key={value} value={value}>
-                        {value === 0 ? "Ville exacte" : `${value} km`}
-                      </option>
-                    ))}
+                    <option value="distance">Distance</option>
+                    <option value="rating">Note</option>
+                    <option value="price_asc">Prix croissant</option>
+                    <option value="price_desc">Prix decroissant</option>
                   </select>
                 </label>
               </div>
@@ -485,11 +509,11 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
                 <button
                   type="button"
                   onClick={() => {
-                    setQuery("");
                     setCityInput("");
                     setSelectedCity(null);
                     setSelectedSpecialties([]);
                     setRadiusKm(25);
+                    setSortMode("distance");
                     setLocationError(null);
                     setShowCitySuggestions(false);
                     setCitySuggestions([]);
@@ -497,15 +521,6 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
                   className="rounded-full bg-white px-5 py-2.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
                 >
                   Reinitialiser
-                </button>
-                <button
-                  type="button"
-                  onClick={fillLocationFromBrowser}
-                  className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
-                  disabled={locationLoading}
-                >
-                  <LocateFixed className="h-4 w-4" />
-                  {locationLoading ? "Localisation..." : "Me localiser"}
                 </button>
               </div>
               {selectedCity ? (
@@ -526,7 +541,7 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
               </p>
               <p className="mt-4 text-3xl font-semibold tracking-tight text-white">{visibleCoaches.length} coachs trouves</p>
               <p className="mt-3 max-w-sm text-sm leading-6 text-white/78">
-                Recherche plus utile: ville + rayon, avec des suggestions reelles alimentees par Geoapify.
+                Recherche epuree: commune, rayon, specialites puis tri par distance, note ou prix.
               </p>
             </div>
           </div>
