@@ -13,11 +13,15 @@ export async function requireUser() {
     redirect("/auth/sign-in?next=/dashboard");
   }
 
-  await syncAppUser({
-    email: user.email,
-    fullName: user.user_metadata?.full_name,
-    role: user.user_metadata?.role
-  });
+  try {
+    await syncAppUser({
+      email: user.email,
+      fullName: user.user_metadata?.full_name,
+      role: user.user_metadata?.role
+    });
+  } catch (error) {
+    console.error("syncAppUser failed in requireUser:", error);
+  }
 
   return user;
 }
@@ -25,13 +29,32 @@ export async function requireUser() {
 export async function requireAppUser() {
   const user = await requireUser();
 
-  const appUser = await prisma.user.findUnique({
+  let appUser = await prisma.user.findUnique({
     where: { email: user.email! },
     include: {
       coachProfile: true,
       clientProfile: true
     }
   });
+
+  if (!appUser) {
+    try {
+      await syncAppUser({
+        email: user.email!,
+        fullName: user.user_metadata?.full_name,
+        role: user.user_metadata?.role
+      });
+      appUser = await prisma.user.findUnique({
+        where: { email: user.email! },
+        include: {
+          coachProfile: true,
+          clientProfile: true
+        }
+      });
+    } catch (error) {
+      console.error("syncAppUser fallback failed in requireAppUser:", error);
+    }
+  }
 
   if (!appUser) {
     redirect("/auth/sign-in");
