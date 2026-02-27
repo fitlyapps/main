@@ -325,7 +325,7 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
 
   return (
     <>
-      <Card className="mt-8 overflow-hidden border border-white/70 bg-white/80 p-0 backdrop-blur-xl">
+      <Card className="mt-8 overflow-visible border border-white/70 bg-white/80 p-0 backdrop-blur-xl">
         <div className="grid gap-0 lg:grid-cols-[1.25fr_0.75fr]">
           <div className="border-b border-slate-200/80 p-5 lg:border-b-0 lg:border-r lg:border-r-slate-200/80">
             <div className="grid gap-5">
