@@ -22,14 +22,21 @@ type CoachCard = {
   currency: string;
 };
 
-type CoachCatalogProps = {
-  coaches: CoachCard[];
-  cityOptions: string[];
-};
-
 type Coordinates = {
   lat: number;
   lon: number;
+};
+
+type CitySuggestion = Coordinates & {
+  city: string;
+  state: string | null;
+  country: string | null;
+  countryCode: string | null;
+  label: string;
+};
+
+type CoachCatalogProps = {
+  coaches: CoachCard[];
 };
 
 const SPECIALTY_OPTIONS = [
@@ -87,33 +94,37 @@ function haversineDistanceKm(a: Coordinates, b: Coordinates) {
   return earthRadiusKm * arc;
 }
 
-async function geocodeCity(city: string): Promise<Coordinates | null> {
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&city=${encodeURIComponent(city)}`,
-    {
-      headers: {
-        Accept: "application/json"
-      }
+async function fetchCitySuggestions(text: string) {
+  const response = await fetch(`/api/geo/cities?text=${encodeURIComponent(text)}&limit=6`, {
+    headers: {
+      Accept: "application/json"
     }
-  );
+  });
 
   if (!response.ok) {
-    return null;
+    throw new Error("Geo city lookup failed");
   }
 
-  const data = (await response.json()) as Array<{ lat: string; lon: string }>;
-  const first = data[0];
-  if (!first) {
-    return null;
-  }
-
-  return {
-    lat: Number(first.lat),
-    lon: Number(first.lon)
-  };
+  const data = (await response.json()) as { results?: CitySuggestion[] };
+  return data.results ?? [];
 }
 
-export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
+async function reverseLookup(lat: number, lon: number) {
+  const response = await fetch(`/api/geo/cities?lat=${lat}&lon=${lon}&limit=1`, {
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error("Geo reverse lookup failed");
+  }
+
+  const data = (await response.json()) as { results?: CitySuggestion[] };
+  return data.results?.[0] ?? null;
+}
+
+export function CoachCatalog({ coaches }: CoachCatalogProps) {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [cityInput, setCityInput] = useState("");
@@ -121,18 +132,12 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([]);
   const [radiusKm, setRadiusKm] = useState(25);
   const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+  const [citySuggestions, setCitySuggestions] = useState<CitySuggestion[]>([]);
+  const [selectedCity, setSelectedCity] = useState<CitySuggestion | null>(null);
   const [distanceFilteredIds, setDistanceFilteredIds] = useState<Set<string> | null>(null);
   const [distanceLoading, setDistanceLoading] = useState(false);
+  const cityCache = useRef<Map<string, CitySuggestion[]>>(new Map());
   const geocodeCache = useRef<Map<string, Coordinates | null>>(new Map());
-
-  const filteredCitySuggestions = useMemo(() => {
-    const normalized = cityInput.trim().toLowerCase();
-    if (!normalized) {
-      return cityOptions.slice(0, 6);
-    }
-
-    return cityOptions.filter((city) => city.toLowerCase().includes(normalized)).slice(0, 6);
-  }, [cityInput, cityOptions]);
 
   const specialtyLabel =
     selectedSpecialties.length === 0
@@ -147,7 +152,7 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
     );
   }
 
-  async function resolveCityCoordinates(city: string) {
+  async function resolveCoachCityCoordinates(city: string) {
     const key = city.trim().toLowerCase();
     if (!key) {
       return null;
@@ -157,27 +162,68 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
       return geocodeCache.current.get(key) ?? null;
     }
 
-    const result = await geocodeCity(city);
-    geocodeCache.current.set(key, result);
-    return result;
+    const matches = await fetchCitySuggestions(city);
+    const match = matches.find((item) => item.city.toLowerCase() === key) ?? matches[0] ?? null;
+    const coordinates = match ? { lat: match.lat, lon: match.lon } : null;
+    geocodeCache.current.set(key, coordinates);
+    return coordinates;
   }
 
   useEffect(() => {
     let cancelled = false;
 
+    async function runAutocomplete() {
+      const text = cityInput.trim();
+      if (!text || selectedCity?.city === text) {
+        if (!text) {
+          setCitySuggestions([]);
+        }
+        return;
+      }
+
+      if (cityCache.current.has(text.toLowerCase())) {
+        setCitySuggestions(cityCache.current.get(text.toLowerCase()) ?? []);
+        return;
+      }
+
+      try {
+        const results = await fetchCitySuggestions(text);
+        if (!cancelled) {
+          cityCache.current.set(text.toLowerCase(), results);
+          setCitySuggestions(results);
+        }
+      } catch {
+        if (!cancelled) {
+          setCitySuggestions([]);
+        }
+      }
+    }
+
+    const timeout = window.setTimeout(() => {
+      void runAutocomplete();
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [cityInput, selectedCity]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function applyRadiusFilter() {
-      const targetCity = cityInput.trim();
-      if (!targetCity) {
+      const target = selectedCity;
+      if (!target) {
         setDistanceFilteredIds(null);
         setDistanceLoading(false);
-        setLocationError(null);
         return;
       }
 
       if (radiusKm === 0) {
         const exactMatches = new Set(
           coaches
-            .filter((coach) => coach.city?.toLowerCase().includes(targetCity.toLowerCase()))
+            .filter((coach) => coach.city?.toLowerCase() === target.city.toLowerCase())
             .map((coach) => coach.id)
         );
         setDistanceFilteredIds(exactMatches);
@@ -188,16 +234,6 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
       setDistanceLoading(true);
       setLocationError(null);
 
-      const targetCoordinates = await resolveCityCoordinates(targetCity);
-      if (!targetCoordinates) {
-        if (!cancelled) {
-          setDistanceFilteredIds(new Set());
-          setDistanceLoading(false);
-          setLocationError("Ville introuvable. Essaie une autre orthographe ou choisis une suggestion.");
-        }
-        return;
-      }
-
       const ids = new Set<string>();
       await Promise.all(
         coaches.map(async (coach) => {
@@ -205,12 +241,12 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
             return;
           }
 
-          const coachCoordinates = await resolveCityCoordinates(coach.city);
+          const coachCoordinates = await resolveCoachCityCoordinates(coach.city);
           if (!coachCoordinates) {
             return;
           }
 
-          const distanceKm = haversineDistanceKm(targetCoordinates, coachCoordinates);
+          const distanceKm = haversineDistanceKm(target, coachCoordinates);
           if (distanceKm <= radiusKm) {
             ids.add(coach.id);
           }
@@ -223,15 +259,12 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
       }
     }
 
-    const timeout = window.setTimeout(() => {
-      void applyRadiusFilter();
-    }, 250);
+    void applyRadiusFilter();
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timeout);
     };
-  }, [cityInput, radiusKm, coaches]);
+  }, [coaches, radiusKm, selectedCity]);
 
   const visibleCoaches = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -267,37 +300,15 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
         try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}`,
-            {
-              headers: {
-                Accept: "application/json"
-              }
-            }
-          );
-
-          if (!response.ok) {
-            throw new Error("Reverse geocoding failed");
+          const result = await reverseLookup(coords.latitude, coords.longitude);
+          if (!result) {
+            throw new Error("No reverse result");
           }
 
-          const data = (await response.json()) as {
-            address?: {
-              city?: string;
-              town?: string;
-              village?: string;
-              municipality?: string;
-            };
-          };
-
-          const city =
-            data.address?.city ||
-            data.address?.town ||
-            data.address?.village ||
-            data.address?.municipality ||
-            "";
-
-          setCityInput(city);
+          setSelectedCity(result);
+          setCityInput(result.city);
           setShowCitySuggestions(false);
+          setCitySuggestions([]);
         } catch {
           setLocationError("Impossible de recuperer la ville automatiquement.");
         } finally {
@@ -342,29 +353,33 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
                         type="text"
                         value={cityInput}
                         onFocus={() => setShowCitySuggestions(true)}
+                        onBlur={() => window.setTimeout(() => setShowCitySuggestions(false), 120)}
                         onChange={(event) => {
                           setCityInput(event.target.value);
+                          setSelectedCity(null);
                           setShowCitySuggestions(true);
                         }}
-                        placeholder="Paris, Lyon, Toulouse"
+                        placeholder="Paris, Lyon, Bordeaux"
                         autoComplete="off"
                         className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
                       />
                     </div>
-                    {showCitySuggestions && filteredCitySuggestions.length ? (
+                    {showCitySuggestions && citySuggestions.length ? (
                       <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
-                        {filteredCitySuggestions.map((city) => (
+                        {citySuggestions.map((city) => (
                           <button
-                            key={city}
+                            key={`${city.city}-${city.lat}-${city.lon}`}
                             type="button"
                             onMouseDown={(event) => {
                               event.preventDefault();
-                              setCityInput(city);
+                              setSelectedCity(city);
+                              setCityInput(city.city);
                               setShowCitySuggestions(false);
                             }}
-                            className="block w-full border-b border-slate-100 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 last:border-b-0"
+                            className="block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 last:border-b-0"
                           >
-                            {city}
+                            <p className="text-sm font-medium text-slate-900">{city.city}</p>
+                            <p className="mt-0.5 text-xs text-slate-500">{city.label}</p>
                           </button>
                         ))}
                       </div>
@@ -435,10 +450,7 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  className="rounded-full bg-slate-950 px-5 py-2.5 text-sm font-medium text-white"
-                >
+                <button type="button" className="rounded-full bg-slate-950 px-5 py-2.5 text-sm font-medium text-white">
                   {distanceLoading ? "Recherche locale..." : `Voir ${visibleCoaches.length} coachs`}
                 </button>
                 <button
@@ -446,10 +458,12 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
                   onClick={() => {
                     setQuery("");
                     setCityInput("");
+                    setSelectedCity(null);
                     setSelectedSpecialties([]);
                     setRadiusKm(25);
                     setLocationError(null);
                     setShowCitySuggestions(false);
+                    setCitySuggestions([]);
                   }}
                   className="rounded-full bg-white px-5 py-2.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
                 >
@@ -465,9 +479,9 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
                   {locationLoading ? "Localisation..." : "Me localiser"}
                 </button>
               </div>
-              {cityInput ? (
+              {selectedCity ? (
                 <p className="text-sm text-slate-500">
-                  Rayon actif: {radiusKm === 0 ? "ville exacte" : `${radiusKm} km autour de ${cityInput}`}
+                  Rayon actif: {radiusKm === 0 ? "ville exacte" : `${radiusKm} km autour de ${selectedCity.city}`}
                 </p>
               ) : null}
               {locationError ? <p className="text-sm font-medium text-rose-600">{locationError}</p> : null}
@@ -483,7 +497,7 @@ export function CoachCatalog({ coaches, cityOptions }: CoachCatalogProps) {
               </p>
               <p className="mt-4 text-3xl font-semibold tracking-tight text-white">{visibleCoaches.length} coachs trouves</p>
               <p className="mt-3 max-w-sm text-sm leading-6 text-white/78">
-                Recherche plus utile: ville + rayon, pour trouver aussi les coachs des villes voisines.
+                Recherche plus utile: ville + rayon, avec des suggestions reelles alimentees par Geoapify.
               </p>
             </div>
           </div>

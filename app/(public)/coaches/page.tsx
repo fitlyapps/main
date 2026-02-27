@@ -13,35 +13,21 @@ const BASE_COMPLETENESS_FILTERS: Prisma.CoachProfileWhereInput[] = [
 ];
 
 export default async function CoachesPage() {
-  const [coaches, cityRows] = await Promise.all([
-    prisma.coachProfile.findMany({
-      where: {
-        AND: BASE_COMPLETENESS_FILTERS
-      },
-      include: {
-        user: {
-          select: {
-            fullName: true,
-            avatarUrl: true
-          }
+  const coaches = await prisma.coachProfile.findMany({
+    where: {
+      AND: BASE_COMPLETENESS_FILTERS
+    },
+    include: {
+      user: {
+        select: {
+          fullName: true,
+          avatarUrl: true
         }
-      },
-      orderBy: [{ isVerified: "desc" }, { avgRating: "desc" }, { createdAt: "desc" }],
-      take: 60
-    }),
-    prisma.coachProfile.findMany({
-      where: {
-        AND: BASE_COMPLETENESS_FILTERS
-      },
-      select: {
-        city: true
-      },
-      distinct: ["city"],
-      orderBy: {
-        city: "asc"
       }
-    })
-  ]);
+    },
+    orderBy: [{ isVerified: "desc" }, { avgRating: "desc" }, { createdAt: "desc" }],
+    take: 60
+  });
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-12">
@@ -54,7 +40,6 @@ export default async function CoachesPage() {
       </div>
 
       <CoachCatalog
-        cityOptions={cityRows.map((row) => row.city).filter((value): value is string => Boolean(value))}
         coaches={coaches.map((coach) => ({
           id: coach.id,
           name: coach.user.fullName,
