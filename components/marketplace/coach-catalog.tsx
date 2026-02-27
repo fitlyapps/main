@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { LocateFixed, MapPin, Search, Sparkles, Star } from "lucide-react";
+import { ChevronDown, LocateFixed, MapPin, Search, Sparkles, Star } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -79,14 +79,12 @@ export function CoachCatalog({ coaches, cityOptions, initialFilters }: CoachCata
     return `${coaches.length} coach${coaches.length > 1 ? "s" : ""} trouves`;
   }, [coaches.length]);
 
-  const citySuggestions = useMemo(() => {
-    if (!cityInput.trim()) {
-      return cityOptions.slice(0, 6);
-    }
-
-    const lowered = cityInput.toLowerCase();
-    return cityOptions.filter((city) => city.toLowerCase().includes(lowered)).slice(0, 6);
-  }, [cityInput, cityOptions]);
+  const specialtyLabel =
+    selectedSpecialties.length === 0
+      ? "Toutes les specialites"
+      : selectedSpecialties.length === 1
+        ? selectedSpecialties[0]
+        : `${selectedSpecialties.length} specialites`;
 
   function toggleSpecialty(option: string) {
     setSelectedSpecialties((current) =>
@@ -153,8 +151,8 @@ export function CoachCatalog({ coaches, cityOptions, initialFilters }: CoachCata
       <Card className="mt-8 overflow-hidden border border-white/70 bg-white/80 p-0 backdrop-blur-xl">
         <div className="grid gap-0 lg:grid-cols-[1.25fr_0.75fr]">
           <div className="border-b border-slate-200/80 p-5 lg:border-b-0 lg:border-r lg:border-r-slate-200/80">
-            <form data-coach-filters="true" className="grid gap-4" method="GET">
-              <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <form data-coach-filters="true" className="grid gap-5" method="GET">
+              <div className="grid gap-4 md:grid-cols-2">
                 <label>
                   <span className="mb-1.5 block text-sm font-medium text-slate-700">Recherche</span>
                   <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
@@ -169,7 +167,7 @@ export function CoachCatalog({ coaches, cityOptions, initialFilters }: CoachCata
                   </div>
                 </label>
 
-                <div className="relative">
+                <label>
                   <span className="mb-1.5 block text-sm font-medium text-slate-700">Ville</span>
                   <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                     <MapPin className="h-4 w-4 text-slate-500" />
@@ -180,60 +178,60 @@ export function CoachCatalog({ coaches, cityOptions, initialFilters }: CoachCata
                       onChange={(event) => setCityInput(event.target.value)}
                       placeholder="Paris, Lyon, Toulouse"
                       autoComplete="off"
+                      list="coach-city-suggestions"
                       className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
                     />
-                  </div>
-                  {citySuggestions.length ? (
-                    <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
-                      {citySuggestions.map((city) => (
-                        <button
-                          key={city}
-                          type="button"
-                          onClick={() => setCityInput(city)}
-                          className="block w-full border-b border-slate-100 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 last:border-b-0"
-                        >
-                          {city}
-                        </button>
+                    <datalist id="coach-city-suggestions">
+                      {cityOptions.map((city) => (
+                        <option key={city} value={city} />
                       ))}
-                    </div>
-                  ) : null}
-                </div>
+                    </datalist>
+                  </div>
+                </label>
               </div>
 
               <div>
-                <div className="mb-1.5 flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-slate-700">Specialites</span>
-                  {selectedSpecialties.length ? (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSpecialties([])}
-                      className="text-xs font-medium text-slate-500 transition hover:text-slate-900"
-                    >
-                      Tout effacer
-                    </button>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {SPECIALTY_OPTIONS.map((option) => {
-                    const selected = selectedSpecialties.includes(option);
+                <span className="mb-1.5 block text-sm font-medium text-slate-700">Specialites</span>
+                <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm text-slate-900">
+                    <span>{specialtyLabel}</span>
+                    <ChevronDown className="h-4 w-4 text-slate-500 transition group-open:rotate-180" />
+                  </summary>
+                  <div className="border-t border-slate-100 px-4 py-4">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {SPECIALTY_OPTIONS.map((option) => {
+                        const selected = selectedSpecialties.includes(option);
 
-                    return (
+                        return (
+                          <label
+                            key={option}
+                            className={cn(
+                              "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition",
+                              selected ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-700"
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleSpecialty(option)}
+                              className="h-4 w-4 rounded border-slate-300"
+                            />
+                            <span>{option}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {selectedSpecialties.length ? (
                       <button
-                        key={option}
                         type="button"
-                        onClick={() => toggleSpecialty(option)}
-                        className={cn(
-                          "rounded-full border px-3.5 py-2 text-sm transition",
-                          selected
-                            ? "border-slate-900 bg-slate-900 text-white"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                        )}
+                        onClick={() => setSelectedSpecialties([])}
+                        className="mt-3 text-xs font-medium text-slate-500 transition hover:text-slate-900"
                       >
-                        {option}
+                        Effacer la selection
                       </button>
-                    );
-                  })}
-                </div>
+                    ) : null}
+                  </div>
+                </details>
                 {selectedSpecialties.map((specialty) => (
                   <input key={specialty} type="hidden" name="specialty" value={specialty} />
                 ))}
@@ -293,34 +291,33 @@ export function CoachCatalog({ coaches, cityOptions, initialFilters }: CoachCata
               transition={{ duration: 0.45, delay: index * 0.05 }}
             >
               <Card className="group relative flex h-full flex-col overflow-hidden border border-slate-200/80 bg-white p-0 shadow-[0_18px_50px_rgba(15,23,42,0.07)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_22px_65px_rgba(15,23,42,0.12)]">
-                <div className="h-28 bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_52%,#7dd3fc_100%)]" />
-                <div className="relative px-6 pb-6">
-                  <div className="-mt-10 flex items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-center gap-4">
-                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-[28px] border-4 border-white bg-slate-950 shadow-lg">
-                        {coach.avatarUrl ? (
-                          <Image src={coach.avatarUrl} alt={coach.name} fill className="object-cover" sizes="80px" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-slate-950 text-xl font-semibold text-white">
-                            {initials(coach.name)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xl font-semibold tracking-tight text-slate-950">{coach.name}</p>
-                        <p className="mt-1 text-sm font-medium text-slate-500">
-                          {formatLocation(coach.city, coach.countryCode)}
-                        </p>
-                      </div>
+                <div className="h-24 bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_52%,#7dd3fc_100%)]" />
+                <div className="px-6 pb-6">
+                  <div className="-mt-9 flex items-start justify-between gap-4">
+                    <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-[24px] border-4 border-white bg-slate-950 shadow-lg" style={{ width: 72, height: 72 }}>
+                      {coach.avatarUrl ? (
+                        <Image src={coach.avatarUrl} alt={coach.name} fill className="object-cover" sizes="72px" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-slate-950 text-lg font-semibold text-white">
+                          {initials(coach.name)}
+                        </div>
+                      )}
                     </div>
                     <span
                       className={cn(
-                        "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold",
+                        "mt-3 shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold",
                         coach.isVerified ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"
                       )}
                     >
                       {coach.isVerified ? "Verifie" : "Profil actif"}
                     </span>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-xl font-semibold tracking-tight text-slate-950">{coach.name}</p>
+                    <p className="mt-1 text-sm font-medium text-slate-500">
+                      {formatLocation(coach.city, coach.countryCode)}
+                    </p>
                   </div>
 
                   <p className="mt-5 min-h-[78px] text-sm leading-7 text-slate-600">{coach.bio}</p>
