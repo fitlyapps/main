@@ -1,4 +1,5 @@
-import { requireUser } from "@/lib/auth";
+import { UserRole } from "@prisma/client";
+import { requireAppUser } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 
 const clients = [
@@ -8,7 +9,17 @@ const clients = [
 ];
 
 export default async function ClientsPage() {
-  await requireUser();
+  const user = await requireAppUser();
+  if (user.role !== UserRole.COACH) {
+    return (
+      <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
+        <Card>
+          <h1 className="text-2xl font-semibold tracking-tight">Espace Clients</h1>
+          <p className="mt-2 text-muted">Cette section est réservée aux coachs.</p>
+        </Card>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
