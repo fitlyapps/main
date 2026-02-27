@@ -14,6 +14,7 @@ async function saveCoachProfile(formData: FormData) {
   }
 
   const bio = String(formData.get("bio") || "").trim();
+  const avatarUrl = String(formData.get("avatarUrl") || "").trim();
   const specialtiesRaw = String(formData.get("specialties") || "");
   const city = String(formData.get("city") || "").trim();
   const countryCode = String(formData.get("countryCode") || "").trim().toUpperCase();
@@ -32,6 +33,13 @@ async function saveCoachProfile(formData: FormData) {
     typeof monthlyPrice === "number" && Number.isFinite(monthlyPrice)
       ? Math.round(monthlyPrice * 100)
       : null;
+
+  await prisma.user.update({
+    where: { id: appUser.id },
+    data: {
+      avatarUrl: avatarUrl || null
+    }
+  });
 
   await prisma.coachProfile.upsert({
     where: { userId: appUser.id },
@@ -82,6 +90,16 @@ export default async function CoachOnboardingPage() {
         <p className="mt-2 text-sm text-muted">Complète ton profil pour apparaître dans le catalogue public.</p>
 
         <form action={saveCoachProfile} className="mt-8 space-y-4">
+          <div>
+            <label className="mb-1 block text-sm text-muted">Photo de profil (URL)</label>
+            <input
+              name="avatarUrl"
+              type="url"
+              defaultValue={appUser.avatarUrl ?? ""}
+              placeholder="https://..."
+              className="w-full rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none ring-accent/40 transition focus:ring"
+            />
+          </div>
           <div>
             <label className="mb-1 block text-sm text-muted">Bio</label>
             <textarea
