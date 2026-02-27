@@ -52,7 +52,9 @@ export default async function CoachesPage() {
           ratingCount: coach.ratingCount,
           isVerified: coach.isVerified,
           monthlyPriceCents: coach.monthlyPriceCents,
-          currency: coach.currency
+          currency: coach.currency,
+          latitude: coach.latitude,
+          longitude: coach.longitude
         }))}
       />
     </main>

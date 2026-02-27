@@ -55,6 +55,8 @@ model CoachProfile {
   yearsExperience    Int?
   countryCode        String?
   city               String?
+  latitude           Float?
+  longitude          Float?
   isVerified         Boolean         @default(false)
   avgRating          Decimal         @default(0) @db.Decimal(3, 2)
   ratingCount        Int             @default(0)

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { UserRole } from "@prisma/client";
 import { requireAppUser } from "@/lib/auth";
+import { geocodeCoachCity } from "@/lib/geoapify";
 import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ async function saveCoachProfile(formData: FormData) {
     typeof monthlyPrice === "number" && Number.isFinite(monthlyPrice)
       ? Math.round(monthlyPrice * 100)
       : null;
+  const geoCity = city ? await geocodeCoachCity(city, countryCode || null).catch(() => null) : null;
 
   await prisma.user.update({
     where: { id: appUser.id },
@@ -48,6 +50,8 @@ async function saveCoachProfile(formData: FormData) {
       specialties,
       city: city || null,
       countryCode: countryCode || null,
+      latitude: geoCity?.lat ?? null,
+      longitude: geoCity?.lon ?? null,
       yearsExperience: Number.isFinite(yearsExperience) ? yearsExperience : null,
       monthlyPriceCents,
       currency: currency || "EUR"
@@ -58,6 +62,8 @@ async function saveCoachProfile(formData: FormData) {
       specialties,
       city: city || null,
       countryCode: countryCode || null,
+      latitude: geoCity?.lat ?? null,
+      longitude: geoCity?.lon ?? null,
       yearsExperience: Number.isFinite(yearsExperience) ? yearsExperience : null,
       monthlyPriceCents,
       currency: currency || "EUR"

@@ -20,6 +20,8 @@ type CoachCard = {
   isVerified: boolean;
   monthlyPriceCents: number | null;
   currency: string;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 type Coordinates = {
@@ -237,6 +239,17 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
       const ids = new Set<string>();
       await Promise.all(
         coaches.map(async (coach) => {
+          if (typeof coach.latitude === "number" && typeof coach.longitude === "number") {
+            const distanceKm = haversineDistanceKm(target, {
+              lat: coach.latitude,
+              lon: coach.longitude
+            });
+            if (distanceKm <= radiusKm) {
+              ids.add(coach.id);
+            }
+            return;
+          }
+
           if (!coach.city) {
             return;
           }
