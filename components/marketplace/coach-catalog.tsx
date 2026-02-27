@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ChevronDown, LocateFixed, MapPin, Search, Sparkles, Star } from "lucide-react";
@@ -137,6 +138,7 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
   const [citySuggestions, setCitySuggestions] = useState<CitySuggestion[]>([]);
   const [selectedCity, setSelectedCity] = useState<CitySuggestion | null>(null);
   const [distanceFilteredIds, setDistanceFilteredIds] = useState<Set<string> | null>(null);
+  const [distanceByCoachId, setDistanceByCoachId] = useState<Record<string, number>>({});
   const [distanceLoading, setDistanceLoading] = useState(false);
   const cityCache = useRef<Map<string, CitySuggestion[]>>(new Map());
   const geocodeCache = useRef<Map<string, Coordinates | null>>(new Map());
@@ -218,17 +220,26 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
       const target = selectedCity;
       if (!target) {
         setDistanceFilteredIds(null);
+        setDistanceByCoachId({});
         setDistanceLoading(false);
         return;
       }
 
       if (radiusKm === 0) {
+        const nextDistances: Record<string, number> = {};
         const exactMatches = new Set(
           coaches
-            .filter((coach) => coach.city?.toLowerCase() === target.city.toLowerCase())
+            .filter((coach) => {
+              const exact = coach.city?.toLowerCase() === target.city.toLowerCase();
+              if (exact) {
+                nextDistances[coach.id] = 0;
+              }
+              return exact;
+            })
             .map((coach) => coach.id)
         );
         setDistanceFilteredIds(exactMatches);
+        setDistanceByCoachId(nextDistances);
         setDistanceLoading(false);
         return;
       }
@@ -237,6 +248,7 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
       setLocationError(null);
 
       const ids = new Set<string>();
+      const nextDistances: Record<string, number> = {};
       await Promise.all(
         coaches.map(async (coach) => {
           if (typeof coach.latitude === "number" && typeof coach.longitude === "number") {
@@ -246,6 +258,7 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
             });
             if (distanceKm <= radiusKm) {
               ids.add(coach.id);
+              nextDistances[coach.id] = distanceKm;
             }
             return;
           }
@@ -262,12 +275,14 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
           const distanceKm = haversineDistanceKm(target, coachCoordinates);
           if (distanceKm <= radiusKm) {
             ids.add(coach.id);
+            nextDistances[coach.id] = distanceKm;
           }
         })
       );
 
       if (!cancelled) {
         setDistanceFilteredIds(ids);
+        setDistanceByCoachId(nextDistances);
         setDistanceLoading(false);
       }
     }
@@ -520,12 +535,8 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
       {visibleCoaches.length ? (
         <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {visibleCoaches.map((coach, index) => (
-            <motion.div
-              key={coach.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, delay: index * 0.05 }}
-            >
+            <motion.div key={coach.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: index * 0.05 }}>
+              <Link href={`/coaches/${coach.id}`} className="block h-full">
               <Card className="group relative flex h-full flex-col overflow-hidden border border-slate-200/80 bg-white p-0 shadow-[0_18px_50px_rgba(15,23,42,0.07)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_22px_65px_rgba(15,23,42,0.12)]">
                 <div className="h-24 bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_52%,#7dd3fc_100%)]" />
                 <div className="px-6 pb-6">
@@ -553,7 +564,16 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
                   </div>
 
                   <div className="mt-4">
-                    <p className="text-xl font-semibold tracking-tight text-slate-950">{coach.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xl font-semibold tracking-tight text-slate-950">{coach.name}</p>
+                      {selectedCity && typeof distanceByCoachId[coach.id] === "number" ? (
+                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                          {distanceByCoachId[coach.id] < 10
+                            ? `${distanceByCoachId[coach.id].toFixed(1)} km`
+                            : `${Math.round(distanceByCoachId[coach.id])} km`}
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="mt-1 text-sm font-medium text-slate-500">
                       {formatLocation(coach.city, coach.countryCode)}
                     </p>
@@ -584,6 +604,7 @@ export function CoachCatalog({ coaches }: CoachCatalogProps) {
                   </div>
                 </div>
               </Card>
+              </Link>
             </motion.div>
           ))}
         </div>
